@@ -2,7 +2,7 @@
 
 A web version of the **Instabox Manager** Android app. Manage your Instabox machines from a browser — list all machines, view live status with colour coding, and perform every action (start, stop, pause, resume, wake, fork, delete, run commands, view logs, metrics, and open a terminal).
 
-Built with plain HTML/CSS/JS (no build step, no framework) and hosted on **GitHub Pages** with a **GitHub Actions** CI workflow that validates the site on every push.
+Built with plain HTML/CSS/JS (no build step, no framework) and hosted on **Cloudflare Pages** with **Cloudflare Functions** for a built-in CORS proxy — zero-config, same-origin API access.
 
 ## What it does
 
@@ -48,28 +48,50 @@ Built with plain HTML/CSS/JS (no build step, no framework) and hosted on **GitHu
 
 ## Data proxy (CORS workaround)
 
-The public Instabox API blocks CORS from browser origins. Since API keys must be entered on the website (not stored in GitHub Secrets), the website uses a three-tier approach:
+The public Instabox API blocks CORS from browser origins. Since API keys must be entered on the website (not stored in GitHub Secrets), the website uses a **four-tier automatic fallback**:
 
-1. **Direct API call** — tries to call `api.instabox.sh` directly from the browser.
-2. **CORS proxy (optional, automatic)** — if a CORS proxy URL is configured (via localStorage `instabox_cors_proxy` or URL param `cors_proxy`), failed direct calls automatically retry through the proxy. You can deploy your own proxy (Cloudflare Worker, Vercel, etc.) for zero-manual-step operation.
-3. **GitHub Actions proxy (fallback)** — a workflow that fetches machine data using the key you enter, then returns it as an artifact. Used when no CORS proxy is configured or it fails.
+1. **Built-in `/api/` proxy (Cloudflare Pages Functions)** — **Primary, zero-config.** When deployed to Cloudflare Pages, a same-origin `/api/*` worker forwards requests to `api.instabox.sh` with CORS headers. No CORS issues, no user setup.
+2. **Direct API call** — tries `api.instabox.sh` directly (works locally if CORS allowed).
+3. **User CORS proxy (optional)** — if a proxy URL is configured (localStorage `instabox_cors_proxy` or URL param `cors_proxy`), failed direct calls retry through it.
+4. **GitHub Actions proxy (fallback)** — manual workflow that fetches data and returns as artifact. Used when all above fail.
 
-### How it works
+### How it works (automatic)
 
-1. You enter your **Instabox API key** (`ibk_…`) on the page — it is stored in your browser's `localStorage` only.
-2. The panel tries to fetch from the Instabox API directly. If the browser blocks it (CORS):
-   - **If a CORS proxy is configured**, it retries automatically via the proxy (no user action needed).
-   - **Otherwise**, the page shows instructions to use the **"Refresh from GitHub Actions"** button.
-3. Click **"Refresh from GitHub Actions"**. The panel triggers the `proxy.yml` GitHub Actions workflow (`workflow_dispatch`). The workflow is manually triggered by the user — the API key is passed as an input to the workflow, not stored in GitHub Secrets.
-4. The workflow curls the Instabox API with your key, gets the response, and uploads it as a workflow artifact.
-5. The panel downloads the artifact and renders the machine list.
+1. You enter your **Instabox API key** (`ibk_…`) on the page — stored in your browser's `localStorage` only.
+2. On load, the panel probes `/api/v1/machines` (HEAD request).
+   - **If it responds** (2xx/401/403), the built-in proxy is active → **all API calls go through `/api/` automatically** (same-origin, no CORS).
+   - **If not**, it falls back to direct → user proxy → GitHub Actions.
+3. No manual steps, no "Refresh from GitHub Actions" button needed when on Cloudflare Pages.
 
-### Configuring a CORS proxy (recommended for seamless UX)
+### Deploy to Cloudflare Pages (recommended)
 
-Deploy a simple CORS proxy (examples below) and set its URL:
+1. Push this repo to GitHub.
+2. Go to [Cloudflare Pages](https://dash.cloudflare.com/?account=pages) → **Create a project** → **Connect to Git** → select this repo.
+3. Build settings:
+   - **Build command**: (empty — static site)
+   - **Build output directory**: `.` (root)
+   - **Root directory**: (empty)
+4. Add **Environment variables** (Settings → Environment variables):
+   - None required for the proxy (it reads the API key from request headers).
+5. Deploy. Your site gets a `*.pages.dev` URL with the `/api/` proxy built in.
 
-- **Via URL param** (for testing): `https://aideveloper2000.github.io/instabox-panel/?cors_proxy=https://your-proxy.workers.dev/?url=`
-- **Persisted in browser**: Open browser console and run `localStorage.setItem('instabox_cors_proxy', 'https://your-proxy.workers.dev/?url=')`
+The `functions/api-proxy.js` and `wrangler.toml` in this repo configure the worker automatically.
+
+### Local development
+
+Open `index.html` directly or serve with any static server:
+```bash
+python3 -m http.server 8000
+# http://localhost:8000
+```
+Locally, the built-in proxy won't be available (404 on `/api/`), so the panel falls back to direct API calls. If your browser blocks CORS, configure a user CORS proxy (see below) or use the GitHub Actions fallback.
+
+### Configuring a user CORS proxy (fallback only)
+
+If not on Cloudflare Pages, deploy a simple CORS proxy and set its URL:
+
+- **Via URL param**: `https://your-site.pages.dev/?cors_proxy=https://your-proxy.workers.dev/?url=`
+- **Persisted in browser**: `localStorage.setItem('instabox_cors_proxy', 'https://your-proxy.workers.dev/?url=')`
 
 #### Quick CORS proxy deploy (Cloudflare Worker)
 
@@ -102,7 +124,7 @@ export default {
 3. Deploy and copy the Worker URL (e.g., `https://instabox-cors.your-subdomain.workers.dev`).
 4. Set it as `cors_proxy` URL param or localStorage (append `?url=` if not already present).
 
-> **Note:** Write operations (start/stop/etc.) still go directly to the Instabox API from your browser. If you hit a CORS block on those endpoints, the CORS proxy will handle them automatically if configured. Otherwise, use the **"Refresh from GitHub Actions"** proxy for those operations too — the `proxy.yml` workflow accepts arbitrary HTTP methods and paths.
+> **Note:** Write operations (start/stop/etc.) go through the same proxy chain. On Cloudflare Pages, they use the built-in `/api/` proxy automatically. Otherwise, they fall back through the chain above.
 
 ## API reference used
 

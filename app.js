@@ -21,10 +21,11 @@
 
 const API_BASE = "https://api.instabox.sh";
 const STORAGE_KEY = "instabox_panel_keys";
-// Optional CORS proxy URL (e.g., "https://your-cors-proxy.workers.dev/?url=").
-// If set, failed direct calls (CORS) will retry via this proxy automatically.
-// Format: proxy base URL that accepts the target URL as a query param "url" or "target".
+// Built-in /api/ proxy (same-origin, no CORS) — auto-detected on Cloudflare Pages
+// Optional user CORS proxy URL — fallback if built-in proxy unavailable
 const CORS_PROXY = ""; // Set via localStorage "instabox_cors_proxy" or URL param "cors_proxy"
+
+let builtInProxyAvailable = false;
 
 const state = {
   keys: [],
@@ -75,7 +76,16 @@ async function apiFetch(path, opts = {}) {
 
   const targetUrl = `${API_BASE}${path}`;
 
-  // Try direct API call first
+  // 1. Try built-in /api/ proxy (same-origin, no CORS) — works on Cloudflare Pages
+  if (builtInProxyAvailable) {
+    try {
+      return await apiFetchViaBuiltInProxy(path, config);
+    } catch (e) {
+      // Fall through to direct call
+    }
+  }
+
+  // 2. Try direct API call
   try {
     const res = await fetch(targetUrl, config);
     let body = null;
@@ -91,7 +101,7 @@ async function apiFetch(path, opts = {}) {
     const msg = err?.message ?? err?.code ?? `Request failed (${status})`;
     throw { res, status, message: msg, body };
   } catch (directErr) {
-    // If it's a CORS error (network error from fetch), try CORS proxy if configured
+    // 3. If CORS error, try user-configured CORS proxy
     const isCorsError = directErr instanceof TypeError && directErr.message.includes("Failed to fetch");
     if (isCorsError && CORS_PROXY) {
       try {
@@ -100,8 +110,7 @@ async function apiFetch(path, opts = {}) {
         // Fall through to ProxyFetchError
       }
     }
-    // CORS blocked the direct call — throw a ProxyFetchError so the caller
-    // knows to fall back to the GitHub Actions proxy workflow.
+    // 4. CORS blocked — throw ProxyFetchError for GitHub Actions fallback
     throw new ProxyFetchError(
       "This page can't reach the Instabox API directly (browser CORS blocks external api.instabox.sh). " +
       "Please add your API key on the page, then use the \"Refresh from GitHub Actions\" button."
@@ -113,6 +122,43 @@ class ProxyFetchError extends Error {
   constructor(message) {
     super(message);
     this.name = "ProxyFetchError";
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Built-in /api/ proxy (Cloudflare Pages Functions)                         */
+/* -------------------------------------------------------------------------- */
+
+async function apiFetchViaBuiltInProxy(path, config) {
+  // Use same-origin /api/ proxy — no CORS issues
+  const proxyUrl = `/api${path}`;
+
+  const res = await fetch(proxyUrl, config);
+  let body = null;
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    body = await res.json().catch(() => null);
+  }
+  if (res.ok) {
+    return { res, status: res.status, body };
+  }
+  const err = (body && body.error ? body.error : null) ?? null;
+  const status = res.status;
+  const msg = err?.message ?? err?.code ?? `Proxy request failed (${status})`;
+  throw { res, status, message: msg, body };
+}
+
+/* Probe /api/ endpoint to detect Cloudflare Pages Functions */
+async function probeBuiltInProxy() {
+  try {
+    const res = await fetch("/api/v1/machines", { method: "HEAD" });
+    if (res.ok || res.status === 401 || res.status === 403) {
+      // 401/403 means the endpoint exists but needs auth — that's fine
+      builtInProxyAvailable = true;
+      console.log("[Instabox Panel] Built-in /api/ proxy detected");
+    }
+  } catch {
+    // Not available — will use direct/CORS proxy/GitHub Actions fallback
   }
 }
 
@@ -671,6 +717,9 @@ async function restoreSnapshot(m, snapId) {
 /* -------------------------------------------------------------------------- */
 
 function init() {
+  // Probe built-in /api/ probe (Cloudflare Pages Functions)
+  probeBuiltInProxy();
+
   // Load CORS proxy from localStorage or URL param
   const storedProxy = localStorage.getItem("instabox_cors_proxy");
   const urlProxy = new URLSearchParams(window.location.search).get("cors_proxy");

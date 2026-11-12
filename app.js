@@ -69,45 +69,35 @@ async function apiFetch(path, opts = {}) {
     config.headers["Idempotency-Key"] = idempotency;
   }
 
-  // readOnly=true requests can fall back to a pre-built data file
-  // (used when the browser is blocked by CORS from calling the API directly).
-  const readOnly = opts.readOnly || false;
-
-  let res;
+  // Try direct API call (may be blocked by browser CORS)
   try {
-    res = await fetch(`${API_BASE}${path}`, config);
-  } catch (e) {
-    if (readOnly) {
-      return fetchFromDataFile(path);
+    const res = await fetch(`${API_BASE}${path}`, config);
+    let body = null;
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      body = await res.json().catch(() => null);
     }
-    throw e;
-  }
-
-  let body = null;
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) {
-    body = await res.json().catch(() => null);
-  }
-  if (!res.ok) {
+    if (res.ok) {
+      return { res, status: res.status, body };
+    }
     const err = (body && body.error ? body.error : null) ?? null;
     const status = res.status;
     const msg = err?.message ?? err?.code ?? `Request failed (${status})`;
     throw { res, status, message: msg, body };
+  } catch (corsErr) {
+    // CORS blocked the direct call — throw a ProxyFetchError so the caller
+    // knows to fall back to the GitHub Actions proxy workflow.
+    throw new ProxyFetchError(
+      "This page can't reach the Instabox API directly (browser CORS blocks external api.instabox.sh). " +
+      "Please add your API key on the page, then use the \"Refresh from GitHub Actions\" button."
+    );
   }
-  return { res, status, body };
 }
 
-async function fetchFromDataFile(path) {
-  const pageUrl = `${window.location.origin}/data/machines${path}`;
-  try {
-    const res = await fetch(pageUrl);
-    if (!res.ok) {
-      throw { status: res.status, message: "No data available yet — the page is still loading." };
-    }
-    const data = await res.json();
-    return { body: data };
-  } catch (e) {
-    throw { status: 404, message: "No pre-built data available. Set INSTABOX_API_KEY in GitHub Actions secrets to populate it." };
+class ProxyFetchError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ProxyFetchError";
   }
 }
 
@@ -356,13 +346,28 @@ function updateEmptyState() {
 }
 
 function showApiError(e) {
-  if (e.status === 401 || e.code === "missing_key" || e.code === "malformed_key") {
+  if (e instanceof ProxyFetchError) {
+    toast(e.message, "error");
+    // When CORS blocks the direct call, offer the GitHub Actions proxy route.
+    const isCors = e.message && (e.message.includes("can't reach") || e.message.includes("CORS"));
+    if (isCors) {
+      $("#proxyHint").style.display = "inline-block";
+      $("#refreshViaActionsBtn").style.display = "inline-block";
+      toast("Browser blocked the direct API call. Use \"Refresh via Actions\" and follow the on-screen instructions.", "error");
+    }
+  } else if (e.status === 401 || e.code === "missing_key" || e.code === "malformed_key") {
     toast("Invalid or missing API key — please add a valid key.", "error");
-  } else if (e.status === 0 || (e.message && (e.message.includes("CORS") || e.message.includes("net::ERR_FAILED")))) {
-    toast("This page can't reach the Instabox API directly due to CORS policy. Add your API key and set INSTABOX_API_KEY in GitHub Actions repository secrets to populate the page data.", "error");
   } else {
     toast(e.message ?? "Something went wrong", "error");
   }
+}
+
+/** Show UI instructing the user to manually trigger the GitHub Actions proxy workflow. */
+function onRefreshViaActions() {
+  $("#proxyHint").style.display = "inline-block";
+  $("#refreshViaActionsBtn").style.display = "none";
+  $("#refreshStatus").textContent = "Proxy mode — follow these steps:";
+  toast("1) Click the GitHub Actions tab in your repo.\n2) Click \"Actions\" → \"Instabox API Proxy\" → \"Run workflow\".\n3) Enter your API key, method, and path, then click \"Run workflow\".\n4) After it completes, click \"⟳ Refresh\" to load the data.");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -658,6 +663,7 @@ function init() {
     renderMachineList();
   });
   $("#refreshBtn").addEventListener("click", () => fetchMachines(true));
+  $("#refreshViaActionsBtn").addEventListener("click", onRefreshViaActions);
 
   // Close modals on backdrop click
   $$("[data-close]").forEach((el) => {

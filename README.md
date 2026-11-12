@@ -48,27 +48,26 @@ Built with plain HTML/CSS/JS (no build step, no framework) and hosted on **GitHu
 
 ## Data proxy (CORS workaround)
 
-The public Instabox API blocks CORS from browser origins, so the website uses a two-part approach:
+The public Instabox API blocks CORS from browser origins. Since API keys must be entered on the website (not stored in GitHub Secrets), the website uses a two-part approach:
 
 1. **Static site** (GitHub Pages) — the HTML/CSS/JS frontend you see.
-2. **Data proxy** (GitHub Actions) — a workflow that fetches machine data from the Instabox API and stores it in `data/machines.json`.
-
-The frontend reads from `data/machines.json` when the direct API call is blocked by CORS.
-
-### Setting up the API key
-
-1. Go to your repo's **Settings → Secrets and variables → Actions**.
-2. Click **New repository secret**.
-3. Name: `INSTABOX_API_KEY` — value: your Instabox API key (`ibk_...`).
-4. Save.
+2. **API proxy** (GitHub Actions) — a workflow that fetches machine data from the Instabox API using the key you enter on the page, then returns it as an artifact.
 
 ### How it works
 
-- The `deploy.yml` workflow fetches machine data from the Instabox API using the `INSTABOX_API_KEY` secret.
-- The data is stored in `data/machines.json` and deployed alongside the site.
-- The frontend reads from `data/machines.json` when the direct API call is blocked by CORS.
+1. You enter your **Instabox API key** (`ibk_…`) on the page — it is stored in your browser's `localStorage` only.
+2. The panel tries to fetch from the Instabox API directly. If the browser blocks it (CORS), the page shows clear instructions: use the **"Refresh from GitHub Actions"** button.
+3. Click **"Refresh from GitHub Actions"**. The panel triggers the `proxy.yml` GitHub Actions workflow (`workflow_dispatch`). The workflow is manually triggered by the user — the API key is passed as an input to the workflow, not stored in GitHub Secrets.
+4. The workflow curls the Instabox API with your key, gets the response, and uploads it as a workflow artifact.
+5. The panel downloads the artifact and renders the machine list.
 
-> **Note:** Write operations (start/stop/etc.) still go directly to the Instabox API from your browser. If you hit a CORS block on those endpoints, set up a small reverse proxy (e.g. Cloudflare Workers, a lightweight server, or a `workflow_dispatch` triggered GitHub Action) that forwards requests and adds the `X-API-Key` header.
+### Setting up the API key
+
+1. Click **+ Add API Key** on the page.
+2. Paste your Instabox API key (`ibk_...`) and give it a name.
+3. The key is stored only in your browser's `localStorage`.
+
+> **Note:** Write operations (start/stop/etc.) still go directly to the Instabox API from your browser. If you hit a CORS block on those endpoints, use the **"Refresh from GitHub Actions"** proxy for those operations too — the `proxy.yml` workflow accepts arbitrary HTTP methods and paths.
 
 ## API reference used
 

@@ -21,20 +21,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Ensure data dir
-        run: mkdir -p data
-
-      - name: Fetch machines from Instabox API
-        env:
-          API_KEY: ${{ secrets.INSTABOX_API_KEY }}
-        run: |
-          if [ -n "$API_KEY" ]; then
-            curl -s -H "X-API-Key: $API_KEY" https://api.instabox.sh/v1/machines -o data/machines.json
-            echo "Fetched $(wc -c < data/machines.json) bytes"
-          else
-            echo "No API key set — skipping data fetch."
-          fi
-
       - name: Validate site
         run: |
           node --check app.js

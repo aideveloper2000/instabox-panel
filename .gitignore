@@ -1,0 +1,10 @@
+# Dependency / build artifacts (none for this static site)
+
+# OS / editor junk
+.DS_Store
+*.swp
+*~
+
+# Local secrets (never commit real API keys)
+.env
+*.local

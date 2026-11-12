@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instabox Panel</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">▦</span>
+        <span class="logo-text">Instabox Panel</span>
+      </div>
+      <div class="header-actions">
+        <button id="addKeyBtn" class="btn btn-outline btn-sm">+ Add API Key</button>
+      </div>
+    </header>
+
+    <!-- API Key bar -->
+    <section class="keybar" id="keybar">
+      <div class="keybar-label">API Key</div>
+      <div class="keybar-value" id="keybarValue">—</div>
+      <div class="keybar-actions">
+        <button id="switchKeyBtn" class="btn btn-outline btn-sm">Switch</button>
+        <button id="removeKeyBtn" class="btn btn-outline btn-sm btn-danger-ghost">Remove</button>
+      </div>
+    </section>
+
+    <!-- Filters -->
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <input id="searchInput" type="text" placeholder="Search machines..." autocomplete="off" />
+      </div>
+      <div class="toolbar-group">
+        <select id="statusFilter">
+          <option value="">All statuses</option>
+          <option value="running">Running</option>
+          <option value="stopped">Stopped</option>
+          <option value="paused">Paused</option>
+          <option value="creating">Creating</option>
+          <option value="deleting">Deleting</option>
+        </select>
+      </div>
+      <div class="toolbar-group">
+        <button id="refreshBtn" class="btn btn-outline btn-sm">⟳ Refresh</button>
+      </div>
+    </div>
+
+    <!-- Machine list -->
+    <main class="main" id="main">
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon">▦</div>
+        <p class="empty-title">No machine connected</p>
+        <p class="empty-desc">Add an Instabox API key above, then refresh to see your machines.</p>
+      </div>
+      <div id="machineList" class="machine-list" hidden></div>
+    </main>
+
+    <footer class="footer">
+      <span id="footerCount"></span>
+      <span class="footer-note">Hosted from GitHub Actions · API: api.instabox.sh</span>
+    </footer>
+  </div>
+
+  <!-- Add/Edit API Key Modal -->
+  <div class="modal" id="keyModal" hidden>
+    <div class="modal-backdrop" data-close="keyModal"></div>
+    <div class="modal-panel">
+      <h2 class="modal-title">API Key</h2>
+      <p class="modal-sub">Manage the Instabox API keys used by this panel.</p>
+      <form id="keyForm" class="form">
+        <label class="form-label">Key name</label>
+        <input id="keyName" class="input" type="text" placeholder="e.g. Work" required />
+        <label class="form-label">API key <span class="hint">(starts with ibk_)</span></label>
+        <input id="keyValue" class="input" type="password" placeholder="ibk_..." required />
+        <div class="form-actions">
+          <button type="button" class="btn btn-outline" data-close="keyModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Key</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Machine Detail Modal -->
+  <div class="modal" id="detailModal" hidden>
+    <div class="modal-backdrop" data-close="detailModal"></div>
+    <div class="modal-panel modal-wide" id="detailPanel">
+      <div class="modal-header">
+        <h2 class="modal-title" id="detailTitle">Machine details</h2>
+        <button class="icon-btn" data-close="detailModal" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="detailBody">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation toast (used via JS) -->
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

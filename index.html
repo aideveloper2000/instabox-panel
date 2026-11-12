@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%236366f1'/><text x='50' y='70' font-size='52' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'>▦</text></svg>" />
 </head>
 <body>
   <div class="app">
@@ -32,7 +33,19 @@
     </section>
 
     <!-- Filters -->
-    <div class="toolbar">
+    <section class="key-list-section" id="keyListSection">
+    <div class="key-list-header">
+      <span class="key-list-label">Keys</span>
+      <div class="key-list-actions">
+        <button id="exportKeyBtn" class="btn btn-outline btn-sm">Export</button>
+        <button id="importKeyBtn" class="btn btn-outline btn-sm">Import</button>
+        <input id="importKeyInput" type="file" accept=".json" hidden />
+      </div>
+    </div>
+    <div id="keyList" class="key-list"></div>
+  </section>
+
+  <div class="toolbar">
       <div class="toolbar-group">
         <input id="searchInput" type="text" placeholder="Search machines..." autocomplete="off" />
       </div>
@@ -73,6 +86,11 @@
     <div class="modal-panel">
       <h2 class="modal-title">API Key</h2>
       <p class="modal-sub">Manage the Instabox API keys used by this panel.</p>
+      <div class="modal-actions">
+        <button id="exportKeyBtn2" class="btn btn-outline btn-sm">Export All</button>
+        <button id="importKeyBtn2" class="btn btn-outline btn-sm">Import</button>
+        <input id="importKeyInput2" type="file" accept=".json" hidden />
+      </div>
       <form id="keyForm" class="form">
         <label class="form-label">Key name</label>
         <input id="keyName" class="input" type="text" placeholder="e.g. Work" required />

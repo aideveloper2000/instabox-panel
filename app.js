@@ -38,6 +38,8 @@ const state = {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+const refreshMachines = fetchMachines;
+
 /* -------------------------------------------------------------------------- */
 /*  Utils                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -60,13 +62,27 @@ async function apiFetch(path, opts = {}) {
   const config = {
     headers,
     ...opts,
-    headers: headers,
+    headers,
   };
   const idempotency = opts.idempotency ?? crypto.randomUUID();
   if (!opts.noIdempotency && (opts.method === "POST" || opts.method === "DELETE" || opts.method === "PATCH")) {
     config.headers["Idempotency-Key"] = idempotency;
   }
-  const res = await fetch(`${API_BASE}${path}`, config);
+
+  // readOnly=true requests can fall back to a pre-built data file
+  // (used when the browser is blocked by CORS from calling the API directly).
+  const readOnly = opts.readOnly || false;
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, config);
+  } catch (e) {
+    if (readOnly) {
+      return fetchFromDataFile(path);
+    }
+    throw e;
+  }
+
   let body = null;
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) {
@@ -79,6 +95,20 @@ async function apiFetch(path, opts = {}) {
     throw { res, status, message: msg, body };
   }
   return { res, status, body };
+}
+
+async function fetchFromDataFile(path) {
+  const pageUrl = `${window.location.origin}/data/machines${path}`;
+  try {
+    const res = await fetch(pageUrl);
+    if (!res.ok) {
+      throw { status: res.status, message: "No data available yet — the page is still loading." };
+    }
+    const data = await res.json();
+    return { body: data };
+  } catch (e) {
+    throw { status: 404, message: "No pre-built data available. Set INSTABOX_API_KEY in GitHub Actions secrets to populate it." };
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -134,6 +164,58 @@ function renderKeyList() {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Import / Export                                                               */
+/* -------------------------------------------------------------------------- */
+
+function exportKeys() {
+  if (!state.keys.length) {
+    toast("No keys to export.");
+    return;
+  }
+  const data = { exported_at: new Date().toISOString(), keys: state.keys };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `instabox-panel-keys-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast("Keys exported");
+}
+
+function importKeys(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || !Array.isArray(data.keys)) {
+        return toast("Invalid file format. Expected JSON with a 'keys' array.");
+      }
+      for (const k of data.keys) {
+        if (!k.name || !k.value) continue;
+        if (state.keys.some((x) => x.value === k.value)) continue;
+        state.keys.push({ name: k.name, value: k.value });
+      }
+      saveKeys();
+      renderKeybar();
+      renderKeyList();
+      toast(`Imported ${state.keys.length} key(s)`);
+    } catch (e) {
+      toast("Failed to parse file: " + e.message, "error");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function handleImportFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  importKeys(file);
+  e.target.value = "";
+}
 function openKeyModal(editKey = null) {
   $("#keyName").value = editKey?.name ?? "";
   $("#keyValue").value = editKey?.value ?? "";
@@ -159,7 +241,7 @@ async function fetchMachines(refresh = false) {
   state.loading = true;
   $("#refreshBtn").disabled = true;
   try {
-    const { body } = await apiFetch("/v1/machines");
+    const { body } = await apiFetch("/v1/machines", { readOnly: true });
     const list = (body && body.machines) ?? [];
     state.machines = list;
     renderMachineList();
@@ -276,6 +358,8 @@ function updateEmptyState() {
 function showApiError(e) {
   if (e.status === 401 || e.code === "missing_key" || e.code === "malformed_key") {
     toast("Invalid or missing API key — please add a valid key.", "error");
+  } else if (e.status === 0 || (e.message && (e.message.includes("CORS") || e.message.includes("net::ERR_FAILED")))) {
+    toast("This page can't reach the Instabox API directly due to CORS policy. Add your API key and set INSTABOX_API_KEY in GitHub Actions repository secrets to populate the page data.", "error");
   } else {
     toast(e.message ?? "Something went wrong", "error");
   }
@@ -540,6 +624,13 @@ function init() {
     renderKeyList();
     toast("Key removed");
   });
+
+  $("#exportKeyBtn").addEventListener("click", exportKeys);
+  $("#importKeyBtn").addEventListener("click", () => $("#importKeyInput").click());
+  $("#exportKeyBtn2").addEventListener("click", exportKeys);
+  $("#importKeyBtn2").addEventListener("click", () => $("#importKeyInput2").click());
+  $("#importKeyInput").addEventListener("change", handleImportFile);
+  $("#importKeyInput2").addEventListener("change", handleImportFile);
 
   $("#keyForm").addEventListener("submit", (e) => {
     e.preventDefault();

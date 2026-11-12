@@ -46,20 +46,29 @@ Built with plain HTML/CSS/JS (no build step, no framework) and hosted on **GitHu
    - Refresh to load machines.
    - Click any machine to see actions and tabs.
 
-## Deployment (GitHub Pages + GitHub Actions)
+## Data proxy (CORS workaround)
 
-The repo includes a GitHub Actions workflow that runs on every push to `main`:
+The public Instabox API blocks CORS from browser origins, so the website uses a two-part approach:
 
-- `.github/workflows/deploy.yml` checks the site builds and is valid HTML/CSS/JS.
+1. **Static site** (GitHub Pages) — the HTML/CSS/JS frontend you see.
+2. **Data proxy** (GitHub Actions) — a workflow that fetches machine data from the Instabox API and stores it in `data/machines.json`.
 
-To publish your own copy:
+The frontend reads from `data/machines.json` when the direct API call is blocked by CORS.
 
-1. Create a new repo on GitHub (e.g. `my-instabox-panel`).
-2. Push this code to `main`.
-3. In repo **Settings → Pages**:
-   - Source: **Deploy from a branch**
-   - Branch: `main`, `/ (root)`
-4. GitHub Pages will publish at `https://<your-username>.github.io/<repo-name>/`.
+### Setting up the API key
+
+1. Go to your repo's **Settings → Secrets and variables → Actions**.
+2. Click **New repository secret**.
+3. Name: `INSTABOX_API_KEY` — value: your Instabox API key (`ibk_...`).
+4. Save.
+
+### How it works
+
+- The `deploy.yml` workflow fetches machine data from the Instabox API using the `INSTABOX_API_KEY` secret.
+- The data is stored in `data/machines.json` and deployed alongside the site.
+- The frontend reads from `data/machines.json` when the direct API call is blocked by CORS.
+
+> **Note:** Write operations (start/stop/etc.) still go directly to the Instabox API from your browser. If you hit a CORS block on those endpoints, set up a small reverse proxy (e.g. Cloudflare Workers, a lightweight server, or a `workflow_dispatch` triggered GitHub Action) that forwards requests and adds the `X-API-Key` header.
 
 ## API reference used
 

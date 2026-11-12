@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: read
   pages: write
   id-token: write
 
@@ -16,17 +17,15 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      NODE_VERSION: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Validate site
         run: |
-          # Lint JS syntax
           node --check app.js
-          echo "Site files OK"
+          echo "JS syntax OK"
+          python3 -c "import re; h=open('index.html').read(); assert '<!DOCTYPE html>' in h and '</html>' in h; print('HTML OK')"
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

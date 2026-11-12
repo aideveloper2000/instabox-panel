@@ -346,13 +346,17 @@ function updateEmptyState() {
 }
 
 function showApiError(e) {
+  const refreshStatus = $("#refreshStatus");
   if (e instanceof ProxyFetchError) {
     toast(e.message, "error");
     // When CORS blocks the direct call, offer the GitHub Actions proxy route.
     const isCors = e.message && (e.message.includes("can't reach") || e.message.includes("CORS"));
     if (isCors) {
-      $("#proxyHint").style.display = "inline-block";
-      $("#refreshViaActionsBtn").style.display = "inline-block";
+      const proxyHint = $("#proxyHint");
+      const refreshViaActionsBtn = $("#refreshViaActionsBtn");
+      if (proxyHint) proxyHint.style.display = "inline-block";
+      if (refreshViaActionsBtn) refreshViaActionsBtn.style.display = "inline-block";
+      if (refreshStatus) refreshStatus.textContent = "Use \"Refresh via GitHub Actions\" — see instructions below.";
       toast("Browser blocked the direct API call. Use \"Refresh via Actions\" and follow the on-screen instructions.", "error");
     }
   } else if (e.status === 401 || e.code === "missing_key" || e.code === "malformed_key") {
@@ -364,9 +368,12 @@ function showApiError(e) {
 
 /** Show UI instructing the user to manually trigger the GitHub Actions proxy workflow. */
 function onRefreshViaActions() {
-  $("#proxyHint").style.display = "inline-block";
-  $("#refreshViaActionsBtn").style.display = "none";
-  $("#refreshStatus").textContent = "Proxy mode — follow these steps:";
+  const proxyHint = $("#proxyHint");
+  const refreshViaActionsBtn = $("#refreshViaActionsBtn");
+  const refreshStatus = $("#refreshStatus");
+  if (proxyHint) proxyHint.style.display = "inline-block";
+  if (refreshViaActionsBtn) refreshViaActionsBtn.style.display = "none";
+  if (refreshStatus) refreshStatus.textContent = "Proxy mode — follow these steps:";
   toast("1) Click the GitHub Actions tab in your repo.\n2) Click \"Actions\" → \"Instabox API Proxy\" → \"Run workflow\".\n3) Enter your API key, method, and path, then click \"Run workflow\".\n4) After it completes, click \"⟳ Refresh\" to load the data.");
 }
 

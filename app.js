@@ -21,6 +21,10 @@
 
 const API_BASE = "https://api.instabox.sh";
 const STORAGE_KEY = "instabox_panel_keys";
+// Optional CORS proxy URL (e.g., "https://your-cors-proxy.workers.dev/?url=").
+// If set, failed direct calls (CORS) will retry via this proxy automatically.
+// Format: proxy base URL that accepts the target URL as a query param "url" or "target".
+const CORS_PROXY = ""; // Set via localStorage "instabox_cors_proxy" or URL param "cors_proxy"
 
 const state = {
   keys: [],
@@ -69,9 +73,11 @@ async function apiFetch(path, opts = {}) {
     config.headers["Idempotency-Key"] = idempotency;
   }
 
-  // Try direct API call (may be blocked by browser CORS)
+  const targetUrl = `${API_BASE}${path}`;
+
+  // Try direct API call first
   try {
-    const res = await fetch(`${API_BASE}${path}`, config);
+    const res = await fetch(targetUrl, config);
     let body = null;
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("application/json")) {
@@ -84,7 +90,16 @@ async function apiFetch(path, opts = {}) {
     const status = res.status;
     const msg = err?.message ?? err?.code ?? `Request failed (${status})`;
     throw { res, status, message: msg, body };
-  } catch (corsErr) {
+  } catch (directErr) {
+    // If it's a CORS error (network error from fetch), try CORS proxy if configured
+    const isCorsError = directErr instanceof TypeError && directErr.message.includes("Failed to fetch");
+    if (isCorsError && CORS_PROXY) {
+      try {
+        return await apiFetchViaCorsProxy(targetUrl, config);
+      } catch (proxyErr) {
+        // Fall through to ProxyFetchError
+      }
+    }
     // CORS blocked the direct call — throw a ProxyFetchError so the caller
     // knows to fall back to the GitHub Actions proxy workflow.
     throw new ProxyFetchError(
@@ -99,6 +114,49 @@ class ProxyFetchError extends Error {
     super(message);
     this.name = "ProxyFetchError";
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  CORS Proxy helper                                                          */
+/* -------------------------------------------------------------------------- */
+
+async function apiFetchViaCorsProxy(targetUrl, config) {
+  if (!CORS_PROXY) throw new Error("No CORS proxy configured");
+
+  // Build proxy URL - supports common patterns: ?url=, ?target=, or direct append
+  let proxyUrl;
+  if (CORS_PROXY.includes("?")) {
+    // Already has query params, append target
+    const sep = CORS_PROXY.endsWith("&") || CORS_PROXY.endsWith("?") ? "" : "&";
+    proxyUrl = `${CORS_PROXY}${sep}url=${encodeURIComponent(targetUrl)}`;
+  } else {
+    // No query params, assume ?url= pattern
+    proxyUrl = `${CORS_PROXY}?url=${encodeURIComponent(targetUrl)}`;
+  }
+
+  // Forward the request through the proxy
+  const proxyConfig = {
+    ...config,
+    headers: {
+      ...config.headers,
+      // Some proxies expect the target URL in a header instead
+      "X-Target-URL": targetUrl,
+    },
+  };
+
+  const res = await fetch(proxyUrl, proxyConfig);
+  let body = null;
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    body = await res.json().catch(() => null);
+  }
+  if (res.ok) {
+    return { res, status: res.status, body };
+  }
+  const err = (body && body.error ? body.error : null) ?? null;
+  const status = res.status;
+  const msg = err?.message ?? err?.code ?? `Proxy request failed (${status})`;
+  throw { res, status, message: msg, body };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -613,6 +671,13 @@ async function restoreSnapshot(m, snapId) {
 /* -------------------------------------------------------------------------- */
 
 function init() {
+  // Load CORS proxy from localStorage or URL param
+  const storedProxy = localStorage.getItem("instabox_cors_proxy");
+  const urlProxy = new URLSearchParams(window.location.search).get("cors_proxy");
+  if (storedProxy) CORS_PROXY = storedProxy;
+  if (urlProxy) CORS_PROXY = urlProxy;
+  if (CORS_PROXY) console.log("[Instabox Panel] CORS proxy enabled:", CORS_PROXY);
+
   loadKeys();
   renderKeybar();
   renderKeyList();

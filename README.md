@@ -48,26 +48,61 @@ Built with plain HTML/CSS/JS (no build step, no framework) and hosted on **GitHu
 
 ## Data proxy (CORS workaround)
 
-The public Instabox API blocks CORS from browser origins. Since API keys must be entered on the website (not stored in GitHub Secrets), the website uses a two-part approach:
+The public Instabox API blocks CORS from browser origins. Since API keys must be entered on the website (not stored in GitHub Secrets), the website uses a three-tier approach:
 
-1. **Static site** (GitHub Pages) — the HTML/CSS/JS frontend you see.
-2. **API proxy** (GitHub Actions) — a workflow that fetches machine data from the Instabox API using the key you enter on the page, then returns it as an artifact.
+1. **Direct API call** — tries to call `api.instabox.sh` directly from the browser.
+2. **CORS proxy (optional, automatic)** — if a CORS proxy URL is configured (via localStorage `instabox_cors_proxy` or URL param `cors_proxy`), failed direct calls automatically retry through the proxy. You can deploy your own proxy (Cloudflare Worker, Vercel, etc.) for zero-manual-step operation.
+3. **GitHub Actions proxy (fallback)** — a workflow that fetches machine data using the key you enter, then returns it as an artifact. Used when no CORS proxy is configured or it fails.
 
 ### How it works
 
 1. You enter your **Instabox API key** (`ibk_…`) on the page — it is stored in your browser's `localStorage` only.
-2. The panel tries to fetch from the Instabox API directly. If the browser blocks it (CORS), the page shows clear instructions: use the **"Refresh from GitHub Actions"** button.
+2. The panel tries to fetch from the Instabox API directly. If the browser blocks it (CORS):
+   - **If a CORS proxy is configured**, it retries automatically via the proxy (no user action needed).
+   - **Otherwise**, the page shows instructions to use the **"Refresh from GitHub Actions"** button.
 3. Click **"Refresh from GitHub Actions"**. The panel triggers the `proxy.yml` GitHub Actions workflow (`workflow_dispatch`). The workflow is manually triggered by the user — the API key is passed as an input to the workflow, not stored in GitHub Secrets.
 4. The workflow curls the Instabox API with your key, gets the response, and uploads it as a workflow artifact.
 5. The panel downloads the artifact and renders the machine list.
 
-### Setting up the API key
+### Configuring a CORS proxy (recommended for seamless UX)
 
-1. Click **+ Add API Key** on the page.
-2. Paste your Instabox API key (`ibk_...`) and give it a name.
-3. The key is stored only in your browser's `localStorage`.
+Deploy a simple CORS proxy (examples below) and set its URL:
 
-> **Note:** Write operations (start/stop/etc.) still go directly to the Instabox API from your browser. If you hit a CORS block on those endpoints, use the **"Refresh from GitHub Actions"** proxy for those operations too — the `proxy.yml` workflow accepts arbitrary HTTP methods and paths.
+- **Via URL param** (for testing): `https://aideveloper2000.github.io/instabox-panel/?cors_proxy=https://your-proxy.workers.dev/?url=`
+- **Persisted in browser**: Open browser console and run `localStorage.setItem('instabox_cors_proxy', 'https://your-proxy.workers.dev/?url=')`
+
+#### Quick CORS proxy deploy (Cloudflare Worker)
+
+1. Go to [Cloudflare Workers](https://dash.cloudflare.com/?account=workers) → Create Worker.
+2. Paste this code:
+```js
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const target = url.searchParams.get('url') || url.searchParams.get('target');
+    if (!target) return new Response('Missing "url" or "target" query param', { status: 400 });
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization, Idempotency-Key',
+      'Access-Control-Max-Age': '86400',
+    };
+    if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+    const req = new Request(target, {
+      method: request.method,
+      headers: request.headers,
+      body: ['GET','HEAD'].includes(request.method) ? undefined : await request.arrayBuffer(),
+      redirect: 'follow',
+    });
+    const resp = await fetch(req);
+    return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+  }
+};
+```
+3. Deploy and copy the Worker URL (e.g., `https://instabox-cors.your-subdomain.workers.dev`).
+4. Set it as `cors_proxy` URL param or localStorage (append `?url=` if not already present).
+
+> **Note:** Write operations (start/stop/etc.) still go directly to the Instabox API from your browser. If you hit a CORS block on those endpoints, the CORS proxy will handle them automatically if configured. Otherwise, use the **"Refresh from GitHub Actions"** proxy for those operations too — the `proxy.yml` workflow accepts arbitrary HTTP methods and paths.
 
 ## API reference used
 

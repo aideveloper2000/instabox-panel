@@ -62,9 +62,9 @@ Connect to Git) with:
 No environment variables are needed. `functions/api/_middleware.js` is picked up
 automatically.
 
-To deploy from GitHub Actions, add `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID` as repository secrets; `.github/workflows/deploy.yml`
-runs `wrangler pages deploy`.
+To deploy from GitHub Actions, add a `CLOUDFLARE_API_TOKEN` repository secret
+with Pages:Edit access; `.github/workflows/deploy.yml` runs
+`wrangler pages deploy` when it is present and skips the deploy when it is not.
 
 ## API surface used
 

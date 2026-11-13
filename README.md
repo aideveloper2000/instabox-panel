@@ -82,7 +82,7 @@ with Pages:Edit access; `.github/workflows/deploy.yml` runs
 | GET | `/v1/machines/{id}/history` | Command history |
 | GET | `/v1/machines/{id}/logs` | Console log |
 | GET | `/v1/machines/{id}/metrics` | CPU / memory / network / disk samples |
-| GET | `/v1/machines/{id}/snapshots` | List snapshots |
+| GET | `/v1/snapshots` | List snapshots (filter by `sourceMachineId`) |
 | POST | `/v1/machines/{id}/snapshots` | Create a snapshot |
 | POST | `/v1/machines/{id}/restore` | Restore a snapshot |
 | WS | `/v1/machines/{id}/terminal` | Browser terminal (PTY) |

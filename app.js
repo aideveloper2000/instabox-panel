@@ -834,9 +834,13 @@
   async function loadSnapshots(m) {
     const list = $("#snapList");
     try {
-      const { body } = await api(`/v1/machines/${encodeURIComponent(m.id)}/snapshots`, { apiKey: m._key });
+      // The API has no per-machine snapshot list; /v1/snapshots is org-wide
+      // and each snapshot carries sourceMachineId.
+      const { body } = await api("/v1/snapshots", { apiKey: m._key });
       if (state.selectedId !== m.id || state.tab !== "snapshots") return;
-      const snaps = body?.snapshots || [];
+      const snaps = (body?.snapshots || [])
+        .filter((s) => s.sourceMachineId === m.id)
+        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
       if (!snaps.length) {
         list.innerHTML = `<div class="out"><span class="empty">No snapshots for this machine.</span></div>`;
         return;

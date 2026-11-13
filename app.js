@@ -47,7 +47,7 @@
     }[c]));
 
   const icon = (name) =>
-    `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+    `<svg class="icon" aria-hidden="true"><use href="#i-${String(name).replace(/^i-/, "")}"></use></svg>`;
 
   const shortKey = (key) =>
     key.length > 12 ? `${key.slice(0, 7)}…${key.slice(-4)}` : key;
@@ -385,9 +385,13 @@
       list.appendChild(banner);
     }
     for (const m of rows) {
-      const row = document.createElement("button");
+      // A row is a div, not a button: it contains real buttons, and nested
+      // interactive elements are invalid HTML (the parser closes the outer
+      // button early and the row collapses).
+      const row = document.createElement("div");
       row.className = "mrow";
-      row.type = "button";
+      row.setAttribute("role", "option");
+      row.tabIndex = 0;
       row.dataset.state = m.state || "unknown";
       row.setAttribute("aria-selected", String(m.id === state.selectedId));
       const acts = rowActions(m);
@@ -402,6 +406,9 @@
         </span>
         <span class="mrow-state">${escapeHtml(stateLabel(m.state))}</span>`;
       row.addEventListener("click", () => selectMachine(m.id));
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectMachine(m.id); }
+      });
       row.querySelectorAll(".rowbtn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();

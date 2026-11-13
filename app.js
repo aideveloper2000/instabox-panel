@@ -232,7 +232,7 @@
     if (state.proxy === null) { text.textContent = "Checking…"; return; }
     if (state.error && !state.machines.length) {
       conn.dataset.state = "error";
-      text.textContent = "API unreachable";
+      text.textContent = state.error.status === 401 ? "Key rejected" : "API unreachable";
       conn.title = state.error.message;
       return;
     }
@@ -381,7 +381,7 @@
       const banner = document.createElement("div");
       banner.className = "banner";
       banner.innerHTML = `<strong>Could not load machines for ${escapeHtml(errNames.join(", "))}.</strong>` +
-        `<div style="margin-top:4px">${escapeHtml(state.keyErrors[errNames[0]])}</div>`;
+        `<div style="margin-top:4px">${escapeHtml(state.keyErrors[errNames[0]].message)}</div>`;
       list.appendChild(banner);
     }
     for (const m of rows) {
@@ -955,7 +955,7 @@
 
     const merged = new Map();
     for (const r of results) {
-      if (r.error) { state.keyErrors[r.name] = r.error.message; continue; }
+      if (r.error) { state.keyErrors[r.name] = r.error; continue; }
       for (const m of r.machines) {
         if (!merged.has(m.id)) merged.set(m.id, { ...m, _key: r.key });
       }
@@ -971,8 +971,8 @@
     state.lastFetch = new Date().toISOString();
 
     if (!state.machines.length && Object.keys(state.keyErrors).length) {
-      const first = Object.values(state.keyErrors)[0];
-      state.error = { message: first, hint: "Check that API key and its scopes." };
+      state.error = Object.values(state.keyErrors)[0];
+      if (!state.error.hint) state.error.hint = "Check that API key and its scopes.";
     }
 
     if (state.selectedId && !state.machines.some((m) => m.id === state.selectedId)) {

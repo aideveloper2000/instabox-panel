@@ -55,6 +55,16 @@
   const stateLabel = (s) =>
     (s || "unknown").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+  // Snapshot names: 1-63 of a-z, 0-9 and '-', starting with a letter or digit.
+  const SNAP_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+  function snapshotName() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    const stamp = `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`;
+    const rand = Math.random().toString(36).slice(2, 6);
+    return `snap-${stamp}-${rand}`; // 24 chars, valid and unique per call
+  }
+
   const fmtBytes = (n) => {
     if (n === null || n === undefined || n === "") return "—";
     const v = Number(n);
@@ -787,23 +797,28 @@
     const body = $("#detailBody");
     body.innerHTML = `
       <div class="snap-head">
-        <div class="field" style="max-width:280px">
-          <input class="input" id="snapName" type="text" placeholder="Snapshot name (a-z, 0-9, -)" autocomplete="off" />
+        <div>
+          <input class="input" id="snapName" type="text" placeholder="Snapshot name (optional)" autocomplete="off" style="max-width:280px" />
+          <p class="field-hint" style="margin:6px 0 0">Leave empty to auto-name · 1–63 chars: a-z, 0-9, “-”, starting with a letter or digit</p>
         </div>
         <button class="btn btn-primary btn-sm" id="snapCreate">${icon("i-camera")}<span>Create snapshot</span></button>
       </div>
       <div class="snap-list" id="snapList"><div class="out"><span class="empty">Loading…</span></div></div>`;
 
     $("#snapCreate").addEventListener("click", async () => {
-      const name = $("#snapName").value.trim();
-      if (!name) return toast("Enter a snapshot name.", "error");
+      let name = $("#snapName").value.trim();
+      if (!name) name = snapshotName();
+      if (!SNAP_NAME_RE.test(name)) {
+        toast("Snapshot names are 1–63 characters: lowercase letters, digits and “-”, starting with a letter or digit.", "error");
+        return;
+      }
       const btn = $("#snapCreate");
       btn.disabled = true;
       try {
         await api(`/v1/machines/${encodeURIComponent(m.id)}/snapshots`, {
           method: "POST", body: { name }, apiKey: m._key,
         });
-        toast(`Snapshot “${name}” queued`);
+        toast(`Snapshot “${name}” created`);
         $("#snapName").value = "";
         await loadSnapshots(m);
       } catch (e) {
@@ -878,7 +893,7 @@
       resume: { method: "POST", path: `/v1/machines/${encodeURIComponent(m.id)}/resume`, body: {} },
       wake: { method: "POST", path: `/v1/machines/${encodeURIComponent(m.id)}/wake`, body: {} },
       fork: { method: "POST", path: `/v1/machines/${encodeURIComponent(m.id)}/fork`, body: {} },
-      snapshot: { method: "POST", path: `/v1/machines/${encodeURIComponent(m.id)}/snapshots`, body: {} },
+      snapshot: { method: "POST", path: `/v1/machines/${encodeURIComponent(m.id)}/snapshots`, body: { name: snapshotName() } },
       delete: { method: "DELETE", path: `/v1/machines/${encodeURIComponent(m.id)}`, confirmDelete: m.id },
     }[action];
 
@@ -895,7 +910,11 @@
       });
       const opId = body?.id || body?.operationId;
       const label = { start: "Start", stop: "Stop", suspend: "Pause", resume: "Resume", wake: "Wake", fork: "Fork", snapshot: "Snapshot", delete: "Delete" }[action];
-      toast(opId ? `${label} queued · operation ${opId}` : `${label} requested`);
+      if (action === "snapshot") {
+        toast(`Snapshot “${def.body.name}” created`);
+      } else {
+        toast(opId ? `${label} queued · operation ${opId}` : `${label} requested`);
+      }
       await fetchMachines(true);
       if (action === "delete" && state.selectedId === m.id) selectMachine(null);
     } catch (e) {

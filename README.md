@@ -91,6 +91,9 @@ with Pages:Edit access; `.github/workflows/deploy.yml` runs
 
 - Lifecycle changes answer `202 Accepted` with an **operation** id; the panel
   reports it and refreshes the list.
+- Snapshot names must be 1–63 characters (`a-z`, `0-9`, `-`, starting with a
+  letter or digit). The detail **Snapshot** action generates one; the Snapshots
+  tab lets you name it, and auto-names when the field is left empty.
 - The terminal is a WebSocket. The API expects browser sessions to come from the
   dashboard's origin, so the Terminal tab may refuse a connection from another
   domain; every other feature works from any origin.

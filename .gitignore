@@ -8,3 +8,6 @@
 # Local secrets (never commit real API keys)
 .env
 *.local
+
+# wrangler / Cloudflare deploy cache
+.wrangler/

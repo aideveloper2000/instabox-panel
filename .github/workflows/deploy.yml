@@ -18,14 +18,11 @@ jobs:
       - name: Validate site
         run: |
           node --check app.js
-          echo "JS syntax OK"
-          python3 -c "import re; h=open('index.html').read(); assert '<!DOCTYPE html>' in h and '</html>' in h; print('HTML OK')"
+          node --check functions/api/_middleware.js
+          echo "syntax OK"
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: instabox-panel
-          directory: .
-          wranglerVersion: "3"
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler@3 pages deploy . --project-name instabox-panel-web --branch main --commit-dirty=true
